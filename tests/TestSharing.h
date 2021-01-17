@@ -29,8 +29,6 @@ class TestSharing : public QObject
 
 private slots:
     void initTestCase();
-    void cleanupTestCase();
-    void testIdempotentDatabaseWriting();
     void testNullObjects();
     void testCertificateSerialization();
     void testCertificateSerialization_data();

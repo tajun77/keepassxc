@@ -17,7 +17,6 @@
 
 #include "TestSharing.h"
 #include "TestGlobal.h"
-#include "stub/TestRandom.h"
 
 #include <QBuffer>
 #include <QSignalSpy>
@@ -48,59 +47,6 @@ Q_DECLARE_METATYPE(QList<KeeShareSettings::ScopedCertificate>)
 void TestSharing::initTestCase()
 {
     QVERIFY(Crypto::init());
-}
-
-void TestSharing::cleanupTestCase()
-{
-    TestRandom::teardown();
-}
-
-void TestSharing::testIdempotentDatabaseWriting()
-{
-    QScopedPointer<Database> db(new Database());
-    auto key = QSharedPointer<CompositeKey>::create();
-    key->addKey(QSharedPointer<PasswordKey>::create("password"));
-    db->setKey(key);
-
-    Group* sharingGroup = new Group();
-    sharingGroup->setName("SharingGroup");
-    sharingGroup->setUuid(QUuid::createUuid());
-    sharingGroup->setParent(db->rootGroup());
-
-    Entry* entry1 = new Entry();
-    entry1->setUuid(QUuid::createUuid());
-    entry1->beginUpdate();
-    entry1->setTitle("Entry1");
-    entry1->endUpdate();
-    entry1->setGroup(sharingGroup);
-
-    Entry* entry2 = new Entry();
-    entry2->setUuid(QUuid::createUuid());
-    entry2->beginUpdate();
-    entry2->setTitle("Entry2");
-    entry2->endUpdate();
-    entry2->setGroup(sharingGroup);
-
-    // prevent from changes introduced by randomization
-    TestRandom::setup(new RandomBackendNull());
-
-    QByteArray bufferOriginal;
-    {
-        QBuffer device(&bufferOriginal);
-        device.open(QIODevice::ReadWrite);
-        KeePass2Writer writer;
-        writer.writeDatabase(&device, db.data());
-    }
-
-    QByteArray bufferCopy;
-    {
-        QBuffer device(&bufferCopy);
-        device.open(QIODevice::ReadWrite);
-        KeePass2Writer writer;
-        writer.writeDatabase(&device, db.data());
-    }
-
-    QCOMPARE(bufferCopy, bufferOriginal);
 }
 
 void TestSharing::testNullObjects()
