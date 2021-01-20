@@ -22,11 +22,13 @@
 #include "core/Group.h"
 #include "core/Metadata.h"
 #include "gui/FileDialog.h"
+#include "gui/MessageBox.h"
 #include "keeshare/KeeShare.h"
 #include "keeshare/KeeShareSettings.h"
 
-#include <QMessageBox>
 #include <QStandardItemModel>
+#include <QStandardPaths>
+#include <QTextStream>
 
 SettingsWidgetKeeShare::SettingsWidgetKeeShare(QWidget* parent)
     : QWidget(parent)
@@ -72,7 +74,7 @@ void SettingsWidgetKeeShare::updateForeignCertificates()
 {
     auto headers = QStringList() << tr("Path") << tr("Status");
 #if defined(WITH_XC_KEESHARE_SECURE)
-    headers << tr("Signer") << tr("Fingerprint") << tr("Certificate");
+    headers << tr("Signer") << tr("Fingerprint");
 #endif
 
     m_importedCertificateModel.reset(new QStandardItemModel());
@@ -90,7 +92,6 @@ void SettingsWidgetKeeShare::updateForeignCertificates()
                            << new QStandardItem(scopedCertificate.isKnown() ? scopedCertificate.certificate.signer
                                                                             : tr("Unknown"))
                            << new QStandardItem(scopedCertificate.certificate.fingerprint())
-                           << new QStandardItem(scopedCertificate.certificate.publicKey())
 #endif
             ;
         m_importedCertificateModel->appendRow(items);
@@ -103,8 +104,6 @@ void SettingsWidgetKeeShare::updateForeignCertificates()
 void SettingsWidgetKeeShare::updateOwnCertificate()
 {
     m_ui->ownCertificateSignerEdit->setText(m_own.certificate.signer);
-    m_ui->ownCertificatePublicKeyEdit->setText(m_own.certificate.publicKey());
-    m_ui->ownCertificatePrivateKeyEdit->setText(m_own.key.privateKey());
     m_ui->ownCertificateFingerprintEdit->setText(m_own.certificate.fingerprint());
 }
 
@@ -133,8 +132,6 @@ void SettingsWidgetKeeShare::generateCertificate()
 {
     m_own = KeeShareSettings::Own::generate();
     m_ui->ownCertificateSignerEdit->setText(m_own.certificate.signer);
-    m_ui->ownCertificatePublicKeyEdit->setText(m_own.certificate.publicKey());
-    m_ui->ownCertificatePrivateKeyEdit->setText(m_own.key.privateKey());
     m_ui->ownCertificateFingerprintEdit->setText(m_own.certificate.fingerprint());
 }
 
@@ -165,16 +162,14 @@ void SettingsWidgetKeeShare::importCertificate()
 void SettingsWidgetKeeShare::exportCertificate()
 {
     if (KeeShare::own() != m_own) {
-        QMessageBox warning;
-        warning.setIcon(QMessageBox::Warning);
-        warning.setWindowTitle(tr("Exporting changed certificate"));
-        warning.setText(tr("The exported certificate is not the same as the one in use. Do you want to export the "
-                           "current certificate?"));
-        auto yes = warning.addButton(QMessageBox::StandardButton::Yes);
-        auto no = warning.addButton(QMessageBox::StandardButton::No);
-        warning.setDefaultButton(no);
-        warning.exec();
-        if (warning.clickedButton() != yes) {
+        auto ans = MessageBox::warning(
+            this,
+            tr("Exporting changed certificate"),
+            tr("The exported certificate is not the same as the one in use. Do you want to export the "
+               "current certificate?"),
+            MessageBox::Yes | MessageBox::No,
+            MessageBox::No);
+        if (ans != MessageBox::Yes) {
             return;
         }
     }

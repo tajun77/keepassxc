@@ -434,12 +434,3 @@ void TestOpenSSHKey::testDecryptUTF8()
     QCOMPARE(key.type(), QString("ssh-ed25519"));
     QCOMPARE(key.comment(), QString("opensshkey-test-utf8@keepassxc"));
 }
-
-void TestOpenSSHKey::testGenerateRSA()
-{
-    OpenSSHKey key = OpenSSHKey::generate(false);
-    QVERIFY(!key.encrypted());
-    QCOMPARE(key.cipherName(), QString("none"));
-    QCOMPARE(key.type(), QString("ssh-rsa"));
-    QCOMPARE(key.comment(), QString(""));
-}

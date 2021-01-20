@@ -174,8 +174,8 @@ bool ASN1Key::parsePublicRSA(QByteArray& ba, OpenSSHKey& key)
     readInt(stream, e);
 
     QList<QByteArray> publicData;
-    publicData.append(e);
     publicData.append(n);
+    publicData.append(e);
 
     QList<QByteArray> privateData;
     privateData.append(n);
@@ -207,8 +207,8 @@ bool ASN1Key::parsePrivateRSA(QByteArray& ba, OpenSSHKey& key)
     readInt(stream, qinv);
 
     QList<QByteArray> publicData;
-    publicData.append(e);
     publicData.append(n);
+    publicData.append(e);
 
     QList<QByteArray> privateData;
     privateData.append(n);

@@ -22,8 +22,10 @@
 #include "keeshare/Signature.h"
 #include "keys/PasswordKey.h"
 
+#include <QBuffer>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QTextStream>
 
 #if defined(WITH_XC_KEESHARE_SECURE)
 #include <quazip.h>
@@ -52,10 +54,8 @@ namespace
         KeeShareSettings::Certificate certificate;
         if (!sign.signature.isEmpty()) {
             certificate = sign.certificate;
-            auto key = sign.certificate.sshKey();
-            key.openKey(QString());
-            const auto signer = Signature();
-            if (!signer.verify(data, sign.signature, key)) {
+            auto key = sign.certificate.key;
+            if (!Signature::verify(data, key, sign.signature)) {
                 qCritical("Invalid signature for shared container %s.", qPrintable(reference.path));
                 return {Invalid, KeeShareSettings::Certificate()};
             }

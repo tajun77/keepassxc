@@ -33,6 +33,10 @@
 #include "keeshare/KeeShareSettings.h"
 #include "keys/PasswordKey.h"
 
+#include <botan/pkcs8.h>
+#include <botan/rsa.h>
+#include <botan/x509_key.h>
+
 #include <format/KeePass2Reader.h>
 
 QTEST_GUILESS_MAIN(TestSharing)
@@ -88,11 +92,10 @@ void TestSharing::testNullObjects()
 void TestSharing::testCertificateSerialization()
 {
     QFETCH(KeeShareSettings::Trust, trusted);
-    const OpenSSHKey& key = stubkey();
+    auto key = stubkey();
     KeeShareSettings::ScopedCertificate original;
     original.path = "/path";
-    original.certificate = KeeShareSettings::Certificate{OpenSSHKey::serializeToBinary(OpenSSHKey::Public, key),
-                                                         "Some <!> &#_\"\" weird string"};
+    original.certificate = KeeShareSettings::Certificate{key, "Some <!> &#_\"\" weird string"};
     original.trust = trusted;
 
     QString buffer;
@@ -102,17 +105,18 @@ void TestSharing::testCertificateSerialization()
     KeeShareSettings::ScopedCertificate::serialize(writer, original);
     writer.writeEndElement();
     writer.writeEndDocument();
+
     QXmlStreamReader reader(buffer);
     reader.readNextStartElement();
     QVERIFY(reader.name() == "Certificate");
     KeeShareSettings::ScopedCertificate restored = KeeShareSettings::ScopedCertificate::deserialize(reader);
 
-    QCOMPARE(restored.certificate.key, original.certificate.key);
+    QCOMPARE(restored.certificate.key->private_key_bits(), original.certificate.key->private_key_bits());
     QCOMPARE(restored.certificate.signer, original.certificate.signer);
     QCOMPARE(restored.trust, original.trust);
     QCOMPARE(restored.path, original.path);
 
-    QCOMPARE(restored.certificate.sshKey().publicParts(), key.publicParts());
+    QCOMPARE(restored.certificate.key->public_key_bits(), key->public_key_bits());
 }
 
 void TestSharing::testCertificateSerialization_data()
@@ -125,9 +129,9 @@ void TestSharing::testCertificateSerialization_data()
 
 void TestSharing::testKeySerialization()
 {
-    const OpenSSHKey& key = stubkey();
+    auto key = stubkey();
     KeeShareSettings::Key original;
-    original.key = OpenSSHKey::serializeToBinary(OpenSSHKey::Private, key);
+    original.key = key;
 
     QString buffer;
     QXmlStreamWriter writer(&buffer);
@@ -141,9 +145,8 @@ void TestSharing::testKeySerialization()
     QVERIFY(reader.name() == "Key");
     KeeShareSettings::Key restored = KeeShareSettings::Key::deserialize(reader);
 
-    QCOMPARE(restored.key, original.key);
-    QCOMPARE(restored.sshKey().privateParts(), key.privateParts());
-    QCOMPARE(restored.sshKey().type(), key.type());
+    QCOMPARE(restored.key->private_key_bits(), original.key->private_key_bits());
+    QCOMPARE(restored.key->algo_name(), original.key->algo_name());
 }
 
 void TestSharing::testReferenceSerialization()
@@ -209,31 +212,34 @@ void TestSharing::testSettingsSerialization()
 
     QCOMPARE(restoredActive.in, importing);
     QCOMPARE(restoredActive.out, exporting);
-    QCOMPARE(restoredOwn.certificate.key, ownCertificate.key);
-    QCOMPARE(restoredOwn.key.key, ownKey.key);
+    if (ownCertificate.key) {
+        QCOMPARE(restoredOwn.certificate.key->private_key_bits(), ownCertificate.key->private_key_bits());
+    }
+    if (ownKey.key) {
+        QCOMPARE(restoredOwn.key.key->private_key_bits(), ownKey.key->private_key_bits());
+    }
     QCOMPARE(restoredForeign.certificates.count(), foreignCertificates.count());
     for (int i = 0; i < foreignCertificates.count(); ++i) {
-        QCOMPARE(restoredForeign.certificates[i].certificate.key, foreignCertificates[i].certificate.key);
+        QCOMPARE(restoredForeign.certificates[i].certificate.key->private_key_bits(),
+                 foreignCertificates[i].certificate.key->private_key_bits());
     }
 }
 
 void TestSharing::testSettingsSerialization_data()
 {
-    const OpenSSHKey& sshKey0 = stubkey(0);
+    auto sshKey0 = stubkey(0);
     KeeShareSettings::ScopedCertificate certificate0;
     certificate0.path = "/path/0";
-    certificate0.certificate = KeeShareSettings::Certificate{OpenSSHKey::serializeToBinary(OpenSSHKey::Public, sshKey0),
-                                                             "Some <!> &#_\"\" weird string"};
+    certificate0.certificate = KeeShareSettings::Certificate{sshKey0, "Some <!> &#_\"\" weird string"};
     certificate0.trust = KeeShareSettings::Trust::Trusted;
 
     KeeShareSettings::Key key0;
-    key0.key = OpenSSHKey::serializeToBinary(OpenSSHKey::Private, sshKey0);
+    key0.key = sshKey0;
 
-    const OpenSSHKey& sshKey1 = stubkey(1);
+    auto sshKey1 = stubkey(1);
     KeeShareSettings::ScopedCertificate certificate1;
     certificate1.path = "/path/1";
-    certificate1.certificate =
-        KeeShareSettings::Certificate{OpenSSHKey::serializeToBinary(OpenSSHKey::Public, sshKey1), "Another "};
+    certificate1.certificate = KeeShareSettings::Certificate{sshKey1, "Another "};
     certificate1.trust = KeeShareSettings::Trust::Untrusted;
 
     QTest::addColumn<bool>("importing");
@@ -253,13 +259,12 @@ void TestSharing::testSettingsSerialization_data()
                        << QList<KeeShareSettings::ScopedCertificate>({certificate1});
 }
 
-const OpenSSHKey& TestSharing::stubkey(int index)
+const QSharedPointer<Botan::RSA_PrivateKey> TestSharing::stubkey(int index)
 {
-    static QMap<int, OpenSSHKey*> keys;
+    static QMap<int, QSharedPointer<Botan::RSA_PrivateKey>> keys;
     if (!keys.contains(index)) {
-        OpenSSHKey* key = new OpenSSHKey(OpenSSHKey::generate(false));
-        key->setParent(this);
-        keys[index] = key;
+        keys.insert(index,
+                    QSharedPointer<Botan::RSA_PrivateKey>(new Botan::RSA_PrivateKey(*randomGen()->getRng(), 2048)));
     }
-    return *keys[index];
+    return keys[index];
 }

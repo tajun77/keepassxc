@@ -19,10 +19,9 @@
 #ifndef KEEPASSXC_BINARYSTREAM_H
 #define KEEPASSXC_BINARYSTREAM_H
 
+#include <QDataStream>
 #include <QObject>
-
-class QIODevice;
-class QDataStream;
+#include <QScopedPointer>
 
 class BinaryStream : QObject
 {
